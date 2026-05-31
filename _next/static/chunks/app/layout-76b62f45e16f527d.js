@@ -1,0 +1,31 @@
+(self.webpackChunk_N_E=self.webpackChunk_N_E||[]).push([[185],{5098:function(e,t,r){Promise.resolve().then(r.t.bind(r,8877,23)),Promise.resolve().then(r.bind(r,6066))},6066:function(e,t,r){"use strict";r.d(t,{default:function(){return p}});var n=r(7437),a=r(7138),i=r(1169),l=r(7440),o=r(8030);/**
+ * @license lucide-react v0.400.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */let s=(0,o.Z)("LayoutDashboard",[["rect",{width:"7",height:"9",x:"3",y:"3",rx:"1",key:"10lvy0"}],["rect",{width:"7",height:"5",x:"14",y:"3",rx:"1",key:"16une8"}],["rect",{width:"7",height:"9",x:"14",y:"12",rx:"1",key:"1hutg5"}],["rect",{width:"7",height:"5",x:"3",y:"16",rx:"1",key:"ldoo1y"}]]);var c=r(4241),u=r(374),d=r(996);/**
+ * @license lucide-react v0.400.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */let f=(0,o.Z)("Users",[["path",{d:"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2",key:"1yyitq"}],["circle",{cx:"9",cy:"7",r:"4",key:"nufk8"}],["path",{d:"M22 21v-2a4 4 0 0 0-3-3.87",key:"kshegd"}],["path",{d:"M16 3.13a4 4 0 0 1 0 7.75",key:"1da9ce"}]]),h=(0,o.Z)("GraduationCap",[["path",{d:"M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z",key:"j76jl0"}],["path",{d:"M22 10v6",key:"1lu8f3"}],["path",{d:"M6 12.5V16a6 3 0 0 0 12 0v-3.5",key:"1r8lef"}]]);var x=r(1077),m=r(7390);let y=[{href:"/",label:"Дашборд",icon:s},{href:"/meetings",label:"Встречи",icon:c.Z},{href:"/tasks",label:"Задачи",icon:u.Z},{href:"/travel",label:"Командировки",icon:d.Z},{href:"/hr",label:"HR / Табель",icon:f},{href:"/training",label:"Вайбкодинг",icon:h},{href:"/expenses",label:"Расходы",icon:x.Z},{href:"/chat",label:"AI Ассистент",icon:m.Z}];function p(){let e=(0,i.usePathname)();return(0,n.jsxs)("aside",{className:"w-56 bg-white border-r border-slate-100 flex flex-col shrink-0",children:[(0,n.jsxs)("div",{className:"px-5 py-5 border-b border-slate-100",children:[(0,n.jsx)("div",{className:"text-xs font-semibold text-brand-600 uppercase tracking-widest mb-0.5",children:"EA Assistant"}),(0,n.jsx)("div",{className:"text-xs text-slate-400",children:"Казахтелеком"})]}),(0,n.jsx)("nav",{className:"flex-1 px-3 py-4 space-y-0.5 overflow-y-auto",children:y.map(t=>{let{href:r,label:i,icon:o}=t,s=e===r||"/"!==r&&e.startsWith(r);return(0,n.jsxs)(a.default,{href:r,className:(0,l.cn)("flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all",s?"bg-brand-50 text-brand-700":"text-slate-500 hover:bg-slate-50 hover:text-slate-800"),children:[(0,n.jsx)(o,{size:16,className:s?"text-brand-500":""}),i]},r)})}),(0,n.jsx)("div",{className:"px-5 py-4 border-t border-slate-100 text-xs text-slate-400",children:"v1.0 \xb7 2026"})]})}},7440:function(e,t,r){"use strict";r.d(t,{GM:function(){return c},H4:function(){return d},cn:function(){return a},dJ:function(){return s},e3:function(){return u},hQ:function(){return i},lb:function(){return o},p6:function(){return l}});var n=r(4839);function a(){for(var e=arguments.length,t=Array(e),r=0;r<e;r++)t[r]=arguments[r];return(0,n.W)(t)}function i(){return Math.random().toString(36).slice(2,10)}function l(e){return e?new Date(e).toLocaleDateString("ru-KZ",{day:"2-digit",month:"2-digit",year:"numeric"}):""}function o(e){let t=arguments.length>1&&void 0!==arguments[1]?arguments[1]:"KZT";return new Intl.NumberFormat("ru-KZ").format(e)+" "+t}function s(e){let t=new Date;t.setHours(0,0,0,0);let r=new Date(e);return r.setHours(0,0,0,0),Math.ceil((r.getTime()-t.getTime())/864e5)}let c={low:"Низкий",medium:"Средний",high:"Высокий",urgent:"Срочно"},u={pending:"Ожидает",in_progress:"В работе",done:"Выполнено",cancelled:"Отменено"},d={draft:"Черновик",submitted:"На согласовании",approved:"Утверждено",closed:"Закрыто"}},8030:function(e,t,r){"use strict";r.d(t,{Z:function(){return s}});var n=r(2265);/**
+ * @license lucide-react v0.400.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */let a=e=>e.replace(/([a-z0-9])([A-Z])/g,"$1-$2").toLowerCase(),i=function(){for(var e=arguments.length,t=Array(e),r=0;r<e;r++)t[r]=arguments[r];return t.filter((e,t,r)=>!!e&&r.indexOf(e)===t).join(" ")};/**
+ * @license lucide-react v0.400.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */var l={xmlns:"http://www.w3.org/2000/svg",width:24,height:24,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"};/**
+ * @license lucide-react v0.400.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */let o=(0,n.forwardRef)((e,t)=>{let{color:r="currentColor",size:a=24,strokeWidth:o=2,absoluteStrokeWidth:s,className:c="",children:u,iconNode:d,...f}=e;return(0,n.createElement)("svg",{ref:t,...l,width:a,height:a,stroke:r,strokeWidth:s?24*Number(o)/Number(a):o,className:i("lucide",c),...f},[...d.map(e=>{let[t,r]=e;return(0,n.createElement)(t,r)}),...Array.isArray(u)?u:[u]])}),s=(e,t)=>{let r=(0,n.forwardRef)((r,l)=>{let{className:s,...c}=r;return(0,n.createElement)(o,{ref:l,iconNode:t,className:i("lucide-".concat(a(e)),s),...c})});return r.displayName="".concat(e),r}},7390:function(e,t,r){"use strict";r.d(t,{Z:function(){return n}});/**
+ * @license lucide-react v0.400.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */let n=(0,r(8030).Z)("MessageSquare",[["path",{d:"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",key:"1lielz"}]])},8877:function(){},4839:function(e,t,r){"use strict";function n(){for(var e,t,r=0,n="",a=arguments.length;r<a;r++)(e=arguments[r])&&(t=function e(t){var r,n,a="";if("string"==typeof t||"number"==typeof t)a+=t;else if("object"==typeof t){if(Array.isArray(t)){var i=t.length;for(r=0;r<i;r++)t[r]&&(n=e(t[r]))&&(a&&(a+=" "),a+=n)}else for(n in t)t[n]&&(a&&(a+=" "),a+=n)}return a}(e))&&(n&&(n+=" "),n+=t);return n}r.d(t,{W:function(){return n}})}},function(e){e.O(0,[404,424,971,23,744],function(){return e(e.s=5098)}),_N_E=e.O()}]);
