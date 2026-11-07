@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gt, inArray, lt, ne, notInArray } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, type Executor } from "../db";
-import { auditLogs, calendarEvents, calendars, eventParticipants, users } from "../db/schema";
+import { auditLogs, calendarEvents, calendars, eventParticipants, eventReminders, users } from "../db/schema";
 import { requirePermission, type Actor } from "../auth/rbac";
 import { NotFoundError, OverlapError, ValidationError, type OverlapInfo } from "../errors";
 import { writeAudit } from "./audit";
@@ -31,6 +31,30 @@ const eventInputSchema = z.object({
   importance: z.enum(Object.keys(IMPORTANCE) as [keyof typeof IMPORTANCE]).default("normal"),
   participants: optionalText(3000),
 });
+
+export const REMINDER_OPTIONS = [1440, 60, 15] as const;
+
+/** Напоминания из формы: чекбоксы remind1440 / remind60 / remind15. */
+export function parseReminders(raw: Record<string, unknown>): number[] {
+  return REMINDER_OPTIONS.filter((m) => {
+    const v = raw[`remind${m}`];
+    return v === "on" || v === true || v === "1";
+  });
+}
+
+async function setReminders(db: Executor, eventId: string, startsAt: Date, minutes: number[], now = new Date()) {
+  await db.delete(eventReminders).where(eq(eventReminders.eventId, eventId));
+  const rows = minutes
+    .map((m) => ({ eventId, minutesBefore: m, fireAt: new Date(startsAt.getTime() - m * 60_000) }))
+    .filter((r) => r.fireAt > now);
+  if (rows.length) await db.insert(eventReminders).values(rows);
+}
+
+export async function getEventReminders(actor: Actor, id: string): Promise<number[]> {
+  await getEvent(actor, id);
+  const rows = await getDb().select({ m: eventReminders.minutesBefore }).from(eventReminders).where(eq(eventReminders.eventId, id));
+  return rows.map((r) => r.m);
+}
 
 export interface ParsedParticipant {
   name: string;
@@ -279,7 +303,7 @@ export async function createEvent(
 ): Promise<{ id: string }> {
   await requirePermission(actor, "calendar.write", { entityType: "calendar_event" });
   const v = validateEventInput(raw);
-  return getDb().transaction(async (tx) => {
+  const created = await getDb().transaction(async (tx) => {
     if (!NON_BLOCKING.includes(v.status as "draft")) {
       const overlaps = await findOverlaps(tx, { startsAt: v.startsAt, endsAt: v.endsAt });
       if (overlaps.length && !opts.confirmOverlap) throw new OverlapError(overlaps);
@@ -308,16 +332,25 @@ export async function createEvent(
     if (v.participants.length) {
       await tx.insert(eventParticipants).values(v.participants.map((p) => ({ eventId: row!.id, ...p })));
     }
+    await setReminders(tx, row!.id, v.startsAt, parseReminders(raw));
     await writeAudit(tx, {
       userId: actor.id,
       action: "event.create",
       entityType: "calendar_event",
       entityId: row!.id,
       ip: actor.ip,
-      metadata: { after: snapshot(v), overlapConfirmed: Boolean(opts.confirmOverlap) },
+      metadata: { after: snapshot(v), overlapConfirmed: Boolean(opts.confirmOverlap), reminders: parseReminders(raw) },
     });
     return { id: row!.id };
   });
+  await afterEventChange(created.id);
+  return created;
+}
+
+/** После сохранения: отправка в Google Calendar, если интеграция подключена. Ошибка не отменяет сохранение. */
+async function afterEventChange(id: string) {
+  const { pushEventToGoogle } = await import("../integrations/google-calendar");
+  await pushEventToGoogle(id).catch(() => undefined);
 }
 
 export async function updateEvent(
@@ -341,6 +374,12 @@ export async function updateEvent(
   for (const k of Object.keys(after) as (keyof typeof after)[]) {
     if (JSON.stringify(before[k]) !== JSON.stringify(after[k])) changes[k] = { from: before[k], to: after[k] };
   }
+  const oldRem = (await getDb().select({ m: eventReminders.minutesBefore }).from(eventReminders).where(eq(eventReminders.eventId, id)))
+    .map((r) => r.m)
+    .sort();
+  const newRem = parseReminders(raw).sort();
+  const remindersChanged = JSON.stringify(oldRem) !== JSON.stringify(newRem);
+  if (remindersChanged) changes.reminders = { from: oldRem.join(", ") || null, to: newRem.join(", ") || null };
   if (!Object.keys(changes).length) return;
 
   await getDb().transaction(async (tx) => {
@@ -382,7 +421,9 @@ export async function updateEvent(
       ip: actor.ip,
       metadata: { changes, overlapConfirmed: Boolean(opts.confirmOverlap) },
     });
+    if (remindersChanged || changes.startsAt) await setReminders(tx, id, v.startsAt, newRem);
   });
+  await afterEventChange(id);
 }
 
 /** Отмена: событие не удаляется, а остаётся в истории со статусом «Отменено». */
@@ -403,7 +444,9 @@ export async function cancelEvent(actor: Actor, id: string, reason?: string): Pr
       ip: actor.ip,
       metadata: { changes: { status: { from: current.status, to: "cancelled" } }, reason: reason?.slice(0, 500) },
     });
+    await tx.delete(eventReminders).where(eq(eventReminders.eventId, id));
   });
+  await afterEventChange(id);
 }
 
 /** Короткий список событий для выбора «связанного события» в задаче. */
@@ -424,3 +467,40 @@ export async function listEventsForPicker(actor: Actor, around: Date) {
 }
 
 
+
+// ---------- Свободные интервалы ----------
+export interface FreeSlot {
+  start: Date;
+  end: Date;
+}
+
+/** Чистая функция: свободные промежутки внутри [from, to) за вычетом занятых интервалов. */
+export function computeFreeSlots(busy: { startsAt: Date; endsAt: Date }[], from: Date, to: Date, minMinutes = 30): FreeSlot[] {
+  const sorted = busy
+    .map((b) => ({ s: Math.max(b.startsAt.getTime(), from.getTime()), e: Math.min(b.endsAt.getTime(), to.getTime()) }))
+    .filter((b) => b.e > b.s)
+    .sort((a, b) => a.s - b.s);
+  const out: FreeSlot[] = [];
+  let cursor = from.getTime();
+  for (const b of sorted) {
+    if (b.s - cursor >= minMinutes * 60_000) out.push({ start: new Date(cursor), end: new Date(b.s) });
+    cursor = Math.max(cursor, b.e);
+  }
+  if (to.getTime() - cursor >= minMinutes * 60_000) out.push({ start: new Date(cursor), end: to });
+  return out;
+}
+
+/** Свободное время руководителя в рабочие часы дня (по обоим календарям, без черновиков и отменённых). */
+export async function findFreeSlots(
+  actor: Actor,
+  dayStart: Date,
+  opts: { startHour?: number; endHour?: number; minMinutes?: number } = {},
+): Promise<FreeSlot[]> {
+  await requirePermission(actor, "calendar.read", { entityType: "calendar_event" });
+  const from = new Date(dayStart.getTime() + (opts.startHour ?? 9) * 3600_000);
+  const to = new Date(dayStart.getTime() + (opts.endHour ?? 19) * 3600_000);
+  const busy = await findOverlaps(getDb(), { startsAt: from, endsAt: to });
+  // findOverlaps ограничен 20 записями — для одного рабочего дня этого достаточно, но берём полный список:
+  const all = busy.length >= 20 ? await listEvents(actor, { from, to, includeDrafts: false }) : busy;
+  return computeFreeSlots(all, from, to, opts.minMinutes ?? 30);
+}

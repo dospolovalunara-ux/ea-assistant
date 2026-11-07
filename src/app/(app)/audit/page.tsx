@@ -14,9 +14,15 @@ const FILTERS = [
   { key: "access.", label: "Отказы в доступе" },
   { key: "event.", label: "Календарь" },
   { key: "task.", label: "Задачи" },
+  { key: "ai.", label: "AI" },
+  { key: "expense.", label: "Расходы" },
+  { key: "document.", label: "Документы" },
+  { key: "protocol.", label: "Протоколы" },
+  { key: "export.", label: "Экспорт" },
+  { key: "user.", label: "Пользователи" },
 ];
 
-const ENTITY_LINK: Record<string, string> = { calendar_event: "/calendar/", task: "/tasks/" };
+const ENTITY_LINK: Record<string, string> = { calendar_event: "/calendar/", task: "/tasks/", inbox_item: "/inbox/", corporate_expense: "/expenses/corporate/", meeting: "/meetings/", family_document: "/documents/" };
 
 function summary(meta: Record<string, unknown>): string {
   const parts: string[] = [];

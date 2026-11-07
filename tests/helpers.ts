@@ -1,5 +1,5 @@
 import { resetSchema, runMigrations } from "@/server/db/migrate";
-import { seedCalendars, seedRolesAndPermissions, seedUsers } from "@/server/db/seed";
+import { seedCalendars, seedDocumentCategories, seedRolesAndPermissions, seedUsers } from "@/server/db/seed";
 import { closeDb } from "@/server/db";
 import { loadActor, type Actor } from "@/server/auth/rbac";
 
@@ -19,6 +19,7 @@ export async function freshDb(): Promise<TestCtx> {
   await resetSchema(url);
   await runMigrations(url);
   await seedRolesAndPermissions();
+  await seedDocumentCategories();
   const ids = await seedUsers(TEST_PASSWORD);
   await seedCalendars(ids.executive, ids.assistant);
   return {

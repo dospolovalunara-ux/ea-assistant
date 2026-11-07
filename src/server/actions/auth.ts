@@ -3,11 +3,19 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { authenticate, LOGIN_MESSAGES } from "../auth/login";
+import { completeMfaLogin, MFA_CHALLENGE_TTL_MS } from "../auth/mfa";
 import { clientMeta } from "../auth/current";
 import { deleteSession, SESSION_COOKIE } from "../auth/session";
 import { getDb } from "../db";
 import { writeAudit } from "../services/audit";
 import type { ActionState } from "@/lib/action-state";
+
+const MFA_COOKIE = "eai_mfa";
+const secure = process.env.NODE_ENV === "production";
+
+async function setSessionCookie(token: string, expires: Date) {
+  (await cookies()).set(SESSION_COOKIE, token, { httpOnly: true, secure, sameSite: "lax", path: "/", expires });
+}
 
 export async function loginAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const email = String(fd.get("email") ?? "");
@@ -17,15 +25,25 @@ export async function loginAction(_prev: ActionState, fd: FormData): Promise<Act
 
   const meta = await clientMeta();
   const result = await authenticate(email, password, meta);
-  if (!result.ok) return { error: LOGIN_MESSAGES[result.reason], values: { email } };
+  if (!result.ok) {
+    if (result.reason === "mfa_required") {
+      (await cookies()).set(MFA_COOKIE, result.challenge, { httpOnly: true, secure, sameSite: "strict", path: "/login", maxAge: MFA_CHALLENGE_TTL_MS / 1000 });
+      redirect("/login/mfa");
+    }
+    return { error: LOGIN_MESSAGES[result.reason], values: { email } };
+  }
+  await setSessionCookie(result.token, result.expiresAt);
+  redirect("/");
+}
 
-  (await cookies()).set(SESSION_COOKIE, result.token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    expires: result.expiresAt,
-  });
+export async function mfaAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const jar = await cookies();
+  const challenge = jar.get(MFA_COOKIE)?.value;
+  if (!challenge) return { error: LOGIN_MESSAGES.mfa_expired };
+  const r = await completeMfaLogin(challenge, String(fd.get("code") ?? ""), await clientMeta());
+  if (!r.ok) return { error: LOGIN_MESSAGES[r.reason] };
+  jar.delete({ name: MFA_COOKIE, path: "/login" });
+  await setSessionCookie(r.token, r.expiresAt);
   redirect("/");
 }
 

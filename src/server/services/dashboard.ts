@@ -1,6 +1,12 @@
 import { can, requirePermission, type Actor } from "../auth/rbac";
 import { listEvents } from "./calendar";
 import { countTasksBySection, listTasks } from "./tasks";
+import { countMissingDocs } from "./corporate-expenses";
+import { countExpiringDocuments } from "./documents";
+import { countProtocolsInReview } from "./protocols";
+import { getDb } from "../db";
+import { inboxItems } from "../db/schema";
+import { eq, sql } from "drizzle-orm";
 import { addLocalDays, localDayEnd, localDayStart, localWeekStart } from "@/lib/time";
 
 /** Все показатели главной страницы считаются запросами к базе. */
@@ -18,7 +24,9 @@ export async function getDashboard(actor: Actor, now = new Date()) {
     taskCounts: Awaited<ReturnType<typeof countTasksBySection>> | null;
     canCalendar: boolean;
     canTasks: boolean;
+    extra: { label: string; value: number; href: string; warn?: boolean }[];
   } = {
+    extra: [],
     eventsToday: [],
     eventsNext3Days: [],
     eventsThisWeek: null,
@@ -56,5 +64,16 @@ export async function getDashboard(actor: Actor, now = new Date()) {
     result.tasksWaiting = waiting;
     result.taskCounts = counts;
   }
+  if (can(actor, "inbox.read")) {
+    const [r] = await getDb().select({ n: sql<number>`count(*)::int` }).from(inboxItems).where(eq(inboxItems.status, "new"));
+    result.extra.push({ label: "Новые входящие", value: r?.n ?? 0, href: "/inbox" });
+  }
+  if (can(actor, "protocols.write")) result.extra.push({ label: "Протоколы на проверке", value: await countProtocolsInReview(actor), href: "/meetings" });
+  if (can(actor, "expenses.corporate.read")) {
+    const n = await countMissingDocs(actor);
+    result.extra.push({ label: "Расходы без документов", value: n, href: "/expenses/corporate?missing=1", warn: n > 0 });
+  }
+  const docs = await countExpiringDocuments(actor, 30);
+  if (docs !== null) result.extra.push({ label: "Документы: срок ≤ 30 дн.", value: docs, href: "/documents?expiring=1", warn: docs > 0 });
   return result;
 }

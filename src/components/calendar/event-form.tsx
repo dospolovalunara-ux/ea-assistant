@@ -21,6 +21,7 @@ export interface EventFormDefaults {
   agenda?: string;
   importance?: string;
   participants?: string;
+  reminders?: number[];
 }
 
 const fmtOverlap = (iso: string, tz: string) =>
@@ -124,6 +125,28 @@ export function EventForm({
             </select>
           </Field>
         </div>
+      </fieldset>
+
+      <fieldset className="rounded-xl border border-border p-4">
+        <legend className="px-1 text-sm font-medium">Напоминания</legend>
+        <div className="flex flex-wrap gap-4 text-sm">
+          {[
+            [1440, "за 1 день"],
+            [60, "за 60 минут"],
+            [15, "за 15 минут"],
+          ].map(([m, label]) => (
+            <label key={m} className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                name={`remind${m}`}
+                defaultChecked={state.values ? state.values[`remind${m}`] === "on" : (defaults.reminders ?? [60, 15]).includes(m as number)}
+                className="h-4 w-4"
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-muted">Уведомления приходят внутри приложения помощнику и руководителю.</p>
       </fieldset>
 
       <div className="grid gap-4 md:grid-cols-2">

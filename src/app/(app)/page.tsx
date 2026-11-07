@@ -22,6 +22,7 @@ export default async function DashboardPage() {
     d.taskCounts && { label: "Открытых задач", value: d.taskCounts.open, href: "/tasks?section=open" },
     d.taskCounts && { label: "Просрочено", value: d.taskCounts.overdue, href: "/tasks?section=overdue", danger: d.taskCounts.overdue > 0 },
     d.taskCounts && { label: "Ожидает ответа", value: d.taskCounts.waiting, href: "/tasks?section=waiting" },
+    ...d.extra.map((x) => ({ label: x.label, value: x.value, href: x.href, danger: x.warn })),
   ].filter(Boolean) as { label: string; value: number; href: string; danger?: boolean }[];
 
   return (

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireActor } from "@/server/auth/current";
 import { requirePermission } from "@/server/auth/rbac";
-import { getEvent } from "@/server/services/calendar";
+import { getEvent, getEventReminders } from "@/server/services/calendar";
 import { orNotFound } from "@/server/page-guard";
 import { updateEventAction } from "@/server/actions/calendar";
 import { EventForm } from "@/components/calendar/event-form";
@@ -16,6 +16,7 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
   await orNotFound(requirePermission(actor, "calendar.write", { entityType: "calendar_event", entityId: id }));
   const e = await orNotFound(getEvent(actor, id));
   if (e.status === "cancelled") notFound();
+  const reminders = await getEventReminders(actor, id);
   const tz = e.timezone;
   return (
     <>
@@ -38,6 +39,7 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
             agenda: e.agenda ?? "",
             importance: e.importance,
             participants: e.participants.map((p) => (p.email ? `${p.name} <${p.email}>` : p.name)).join("\n"),
+            reminders,
           }}
           submitLabel="Сохранить"
           cancelHref={`/calendar/${e.id}`}

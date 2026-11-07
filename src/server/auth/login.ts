@@ -4,6 +4,7 @@ import { loginAttempts, users } from "../db/schema";
 import { normalizeIp, writeAudit } from "../services/audit";
 import { dummyVerify, verifyPassword } from "./password";
 import { createSession } from "./session";
+import { createMfaChallenge } from "./mfa";
 
 export const LOCK_WINDOW_MS = 15 * 60 * 1000;
 export const MAX_FAILS_PER_EMAIL = 5;
@@ -11,11 +12,14 @@ export const MAX_FAILS_PER_IP = 20;
 
 export type LoginResult =
   | { ok: true; userId: string; token: string; expiresAt: Date }
-  | { ok: false; reason: "invalid" | "locked" };
+  | { ok: false; reason: "invalid" | "locked" }
+  | { ok: false; reason: "mfa_required"; challenge: string };
 
 export const LOGIN_MESSAGES = {
   invalid: "Неверный email или пароль",
   locked: "Слишком много неудачных попыток. Попробуйте снова через 15 минут.",
+  mfa_invalid: "Неверный код. Проверьте время на телефоне и попробуйте снова.",
+  mfa_expired: "Время на ввод кода истекло. Войдите заново.",
 } as const;
 
 async function recentFailures(email: string, ip: string | null) {
@@ -79,6 +83,12 @@ export async function authenticate(
   }
 
   await db.insert(loginAttempts).values({ email, ip, success: true });
+  if (user.mfaEnabled) {
+    // Пароль верен, но вход завершится только после кода из приложения-аутентификатора.
+    const challenge = await createMfaChallenge(user.id);
+    await writeAudit(db, { userId: user.id, action: "auth.mfa_challenge", entityType: "user", entityId: user.id, ip });
+    return { ok: false, reason: "mfa_required", challenge };
+  }
   await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
   const session = await createSession(user.id, { ip, userAgent: meta.userAgent });
   await writeAudit(db, { userId: user.id, action: "auth.login", entityType: "user", entityId: user.id, ip });

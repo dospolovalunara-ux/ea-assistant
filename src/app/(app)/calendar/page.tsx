@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireActor } from "@/server/auth/current";
 import { can } from "@/server/auth/rbac";
-import { listEvents, type EventRow } from "@/server/services/calendar";
+import { findFreeSlots, listEvents, type EventRow } from "@/server/services/calendar";
 import { orNotFound } from "@/server/page-guard";
 import { ButtonLink, Card, Empty, PageHeader, cx } from "@/components/ui";
 import { EventLine, eventTimeLabel } from "@/components/display";
@@ -22,29 +22,42 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
   const sp = await searchParams;
   const one = (k: string) => (Array.isArray(sp[k]) ? sp[k]![0] : sp[k]) as string | undefined;
 
-  const view = one("view") === "list" ? "list" : "week";
+  const v = one("view");
+  const view: "week" | "list" | "day" | "month" = v === "list" || v === "day" || v === "month" ? v : "week";
   const anchor = (one("date") && parseLocalDate(one("date")!, tz)) || localDayStart(new Date(), tz);
   const calParam = one("cal");
   const kinds: CalendarKindCode[] = calParam === "work" ? ["work"] : calParam === "personal" ? ["personal"] : ["work", "personal"];
   const showCancelled = one("cancelled") === "1";
 
-  const from = view === "week" ? localWeekStart(anchor, tz) : anchor;
-  const days = view === "week" ? 7 : 14;
+  const monthStart = parseLocalDate(fmt(anchor, "yyyy-MM-01", tz), tz)!;
+  const monthGridStart = localWeekStart(monthStart, tz);
+  const from = view === "week" ? localWeekStart(anchor, tz) : view === "month" ? monthGridStart : anchor;
+  const days = view === "week" ? 7 : view === "day" ? 1 : view === "month" ? 42 : 14;
   const to = addLocalDays(from, days, tz);
   const events = await orNotFound(listEvents(actor, { from, to, kinds, includeCancelled: showCancelled }));
+  const freeSlots = view === "day" ? await findFreeSlots(actor, anchor) : [];
 
-  const step = view === "week" ? 7 : 14;
+  const nextMonth = parseLocalDate(fmt(addLocalDays(monthStart, 32, tz), "yyyy-MM-01", tz), tz)!;
+  const prevMonth = parseLocalDate(fmt(addLocalDays(monthStart, -1, tz), "yyyy-MM-01", tz), tz)!;
+  const step = view === "week" ? 7 : view === "day" ? 1 : 14;
   const q = (over: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
     const merged = { view, date: fmt(anchor, "yyyy-MM-dd", tz), cal: calParam, cancelled: showCancelled ? "1" : undefined, ...over };
     for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
     return `/calendar?${p.toString()}`;
   };
-  const shift = (n: number) => q({ date: fmt(addLocalDays(anchor, n, tz), "yyyy-MM-dd", tz) });
+  const shift = (n: number) =>
+    view === "month"
+      ? q({ date: fmt(n > 0 ? nextMonth : prevMonth, "yyyy-MM-dd", tz) })
+      : q({ date: fmt(addLocalDays(anchor, n, tz), "yyyy-MM-dd", tz) });
   const title =
     view === "week"
       ? `${fmt(from, "d MMM", tz)} – ${fmt(addLocalDays(from, 6, tz), "d MMM yyyy", tz)}`
-      : `${fmt(from, "d MMM", tz)} – ${fmt(addLocalDays(from, 13, tz), "d MMM yyyy", tz)}`;
+      : view === "day"
+        ? fmt(anchor, "EEEE, d MMMM yyyy", tz)
+        : view === "month"
+          ? fmt(monthStart, "LLLL yyyy", tz)
+          : `${fmt(from, "d MMM", tz)} – ${fmt(addLocalDays(from, 13, tz), "d MMM yyyy", tz)}`;
 
   const seg = "inline-flex h-9 items-center px-3 text-sm transition first:rounded-l-lg last:rounded-r-lg border border-border -ml-px first:ml-0";
   const segOn = "bg-primary text-primary-fg border-primary relative z-10";
@@ -69,8 +82,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
           <div className="flex" role="group" aria-label="Вид">
             <Link href={q({ view: "week" })} className={cx(seg, view === "week" ? segOn : segOff)}>Неделя</Link>
             <Link href={q({ view: "list" })} className={cx(seg, view === "list" ? segOn : segOff)}>Список</Link>
-            <span className={cx(seg, "cursor-not-allowed bg-surface text-muted/50")} title="В разработке">День</span>
-            <span className={cx(seg, "cursor-not-allowed bg-surface text-muted/50")} title="В разработке">Месяц</span>
+            <Link href={q({ view: "day" })} className={cx(seg, view === "day" ? segOn : segOff)}>День</Link>
+            <Link href={q({ view: "month" })} className={cx(seg, view === "month" ? segOn : segOff)}>Месяц</Link>
           </div>
           <div className="flex" role="group" aria-label="Календари">
             <Link href={q({ cal: undefined })} className={cx(seg, !calParam ? segOn : segOff)}>Все</Link>
@@ -87,13 +100,37 @@ export default async function CalendarPage({ searchParams }: { searchParams: SP 
         </div>
       </div>
 
-      {view === "week" ? <WeekView events={events} from={from} tz={tz} /> : <ListView events={events} from={from} tz={tz} />}
+      {view === "week" && <WeekView events={events} from={from} tz={tz} days={7} />}
+      {view === "list" && <ListView events={events} from={from} tz={tz} />}
+      {view === "month" && <MonthView events={events} from={from} monthStart={monthStart} tz={tz} q={q} />}
+      {view === "day" && (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_300px]">
+          <div className="min-w-0"><WeekView events={events} from={from} tz={tz} days={1} /></div>
+          <Card className="self-start">
+            <div className="border-b border-border px-5 py-3 text-[15px] font-semibold">Свободное время 09:00–19:00</div>
+            {freeSlots.length ? (
+              <ul className="divide-y divide-border">
+                {freeSlots.map((f) => (
+                  <li key={f.start.toISOString()} className="flex items-center justify-between px-5 py-2.5 text-sm">
+                    <span className="tabular-nums">{fmt(f.start, "HH:mm", tz)} – {fmt(f.end, "HH:mm", tz)}</span>
+                    <span className="text-muted">{Math.round((f.end.getTime() - f.start.getTime()) / 60000)} мин</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <Empty>Свободных интервалов от 30 минут нет</Empty>
+            )}
+            <p className="border-t border-border px-5 py-2.5 text-xs text-muted">По обоим календарям, без черновиков и отменённых</p>
+          </Card>
+        </div>
+      )}
     </>
   );
 }
 
-function WeekView({ events, from, tz }: { events: EventRow[]; from: Date; tz: string }) {
-  const days = Array.from({ length: 7 }, (_, i) => {
+function WeekView({ events, from, tz, days: n }: { events: EventRow[]; from: Date; tz: string; days: number }) {
+  const cols = n === 1 ? "grid-cols-[56px_1fr]" : "grid-cols-[56px_repeat(7,1fr)]";
+  const days = Array.from({ length: n }, (_, i) => {
     const start = addLocalDays(from, i, tz);
     return { start, end: addLocalDays(start, 1, tz) };
   });
@@ -104,9 +141,9 @@ function WeekView({ events, from, tz }: { events: EventRow[]; from: Date; tz: st
   return (
     <Card className="overflow-hidden">
       <div className="overflow-x-auto">
-        <div className="min-w-[860px]">
+        <div className={n === 1 ? "" : "min-w-[860px]"}>
           {/* Заголовки дней */}
-          <div className="grid grid-cols-[56px_repeat(7,1fr)] border-b border-border">
+          <div className={cx("grid border-b border-border", cols)}>
             <div />
             {days.map((d) => {
               const isToday = fmt(d.start, "yyyy-MM-dd", tz) === todayKey;
@@ -123,7 +160,7 @@ function WeekView({ events, from, tz }: { events: EventRow[]; from: Date; tz: st
 
           {/* События на весь день */}
           {allDay.length > 0 && (
-            <div className="grid grid-cols-[56px_repeat(7,1fr)] border-b border-border">
+            <div className={cx("grid border-b border-border", cols)}>
               <div className="px-1 py-1.5 text-right text-[10px] text-muted">весь день</div>
               {days.map((d) => (
                 <div key={d.start.toISOString()} className="space-y-1 border-l border-border p-1">
@@ -150,7 +187,7 @@ function WeekView({ events, from, tz }: { events: EventRow[]; from: Date; tz: st
           {/* Сетка по часам */}
           <div id="week-grid" className="relative max-h-[640px] overflow-y-auto">
             <ScrollToHour targetId="week-grid" hour={7} hourHeight={HOUR} />
-            <div className="grid grid-cols-[56px_repeat(7,1fr)]" style={{ height: HOUR * 24 }}>
+            <div className={cx("grid", cols)} style={{ height: HOUR * 24 }}>
               <div className="relative">
                 {Array.from({ length: 24 }, (_, h) => (
                   <div key={h} className="absolute right-2 -translate-y-1/2 text-[11px] tabular-nums text-muted" style={{ top: h * HOUR }}>
@@ -227,5 +264,54 @@ function ListView({ events, from, tz }: { events: EventRow[]; from: Date; tz: st
         </Card>
       ))}
     </div>
+  );
+}
+
+function MonthView({
+  events,
+  from,
+  monthStart,
+  tz,
+  q,
+}: {
+  events: EventRow[];
+  from: Date;
+  monthStart: Date;
+  tz: string;
+  q: (o: Record<string, string | undefined>) => string;
+}) {
+  const month = fmt(monthStart, "yyyy-MM", tz);
+  const todayKey = fmt(new Date(), "yyyy-MM-dd", tz);
+  const cells = Array.from({ length: 42 }, (_, i) => addLocalDays(from, i, tz));
+  return (
+    <Card className="overflow-hidden">
+      <div className="grid grid-cols-7 border-b border-border text-center text-xs uppercase text-muted">
+        {["пн", "вт", "ср", "чт", "пт", "сб", "вс"].map((d) => <div key={d} className="py-2">{d}</div>)}
+      </div>
+      <div className="grid grid-cols-7">
+        {cells.map((d) => {
+          const end = addLocalDays(d, 1, tz);
+          const key = fmt(d, "yyyy-MM-dd", tz);
+          const items = events.filter((e) => e.startsAt < end && e.endsAt > d);
+          const inMonth = key.startsWith(month);
+          return (
+            <div key={key} className={cx("min-h-[104px] border-b border-r border-border p-1.5", !inMonth && "bg-surface-2/50")}>
+              <Link href={q({ view: "day", date: key })} className={cx("mb-1 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs", key === todayKey ? "bg-primary text-primary-fg" : inMonth ? "text-text hover:bg-surface-2" : "text-muted")}>
+                {fmt(d, "d", tz)}
+              </Link>
+              <div className="space-y-0.5">
+                {items.slice(0, 3).map((e) => (
+                  <Link key={e.id} href={`/calendar/${e.id}`} className={cx("block truncate rounded px-1 text-[11px] leading-5", e.calendarKind === "work" ? "bg-work-bg text-work" : "bg-personal-bg text-personal", e.status === "cancelled" && "line-through opacity-60")}>
+                    {!e.allDay && <span className="tabular-nums">{fmt(e.startsAt, "HH:mm", tz)} </span>}
+                    {e.title}
+                  </Link>
+                ))}
+                {items.length > 3 && <Link href={q({ view: "day", date: key })} className="block px-1 text-[11px] text-muted hover:text-text">ещё {items.length - 3}</Link>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
   );
 }

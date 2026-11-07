@@ -2,22 +2,26 @@ import { requireActor } from "@/server/auth/current";
 import { can, canAny } from "@/server/auth/rbac";
 import { logoutAction } from "@/server/actions/auth";
 import { NavList, type NavItem } from "@/components/nav";
+import { unreadCount } from "@/server/services/notifications";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const actor = await requireActor();
 
   // Пункты без прав не показываются. Нереализованные модули — серые, без перехода.
+  const unread = await unreadCount(actor);
+  // Пункты без прав не показываются.
   const items: (NavItem & { visible: boolean })[] = [
     { href: "/", label: "Главная", enabled: true, visible: can(actor, "dashboard.view") },
     { href: "/calendar", label: "Календарь", enabled: true, visible: can(actor, "calendar.read") },
-    { href: "#inbox", label: "Входящие", enabled: false, visible: actor.role !== "tech_admin" },
+    { href: "/inbox", label: "Входящие", enabled: true, visible: can(actor, "inbox.read") },
     { href: "/tasks", label: "Задачи и поручения", enabled: true, visible: canAny(actor, "tasks.read_all", "tasks.read_shared") },
-    { href: "#protocols", label: "Совещания и протоколы", enabled: false, visible: actor.role !== "tech_admin" },
-    { href: "#corp", label: "Корпоративные расходы", enabled: false, visible: actor.role === "assistant" },
-    { href: "#personal", label: "Личные расходы", enabled: false, visible: actor.role !== "tech_admin" },
-    { href: "#docs", label: "Семейные документы", enabled: false, visible: actor.role !== "tech_admin" },
-    { href: "#reports", label: "Отчёты", enabled: false, visible: actor.role !== "tech_admin" },
-    { href: "#settings", label: "Настройки и доступы", enabled: false, visible: actor.role !== "executive" },
+    { href: "/meetings", label: "Совещания и протоколы", enabled: true, visible: canAny(actor, "protocols.read", "protocols.write") },
+    { href: "/expenses/corporate", label: "Корпоративные расходы", enabled: true, visible: can(actor, "expenses.corporate.read") },
+    { href: "/expenses/personal", label: "Личные расходы", enabled: true, visible: can(actor, "expenses.personal.read") },
+    { href: "/documents", label: "Семейные документы", enabled: true, visible: can(actor, "documents.read") },
+    { href: "/reports", label: "Отчёты", enabled: true, visible: can(actor, "reports.view") },
+    { href: "/notifications", label: unread ? `Уведомления · ${unread}` : "Уведомления", enabled: true, visible: true },
+    { href: "/settings", label: "Настройки и доступы", enabled: true, visible: true },
     { href: "/audit", label: "Журнал действий", enabled: true, visible: can(actor, "audit.read") },
   ];
   const nav = items.filter((i) => i.visible);

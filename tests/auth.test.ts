@@ -75,3 +75,23 @@ describe("Вход и сессии", () => {
     expect(JSON.stringify(rows)).not.toContain("SuperSecretGuess");
   });
 });
+
+describe("MFA (TOTP)", () => {
+  it("вход с включённой MFA требует код; верный код создаёт сессию", async () => {
+    const { generateSync } = await import("otplib");
+    const { beginMfaEnrollment, confirmMfaEnrollment, completeMfaLogin } = await import("@/server/auth/mfa");
+    const { loadActor } = await import("@/server/auth/rbac");
+    process.env.APP_ENCRYPTION_KEY = Buffer.alloc(32, 3).toString("base64");
+    const actor = (await loadActor(ctx.ids.executive))!;
+    const { secret } = await beginMfaEnrollment(actor);
+    await confirmMfaEnrollment(actor, generateSync({ secret }));
+    const first = await authenticate("executive@demo.local", TEST_PASSWORD, { ip: "192.0.2.77" });
+    expect(first.ok).toBe(false);
+    if (first.ok || first.reason !== "mfa_required") throw new Error("ожидался запрос MFA");
+    expect((await completeMfaLogin(first.challenge, "000000", {})).ok).toBe(false);
+    const done = await completeMfaLogin(first.challenge, generateSync({ secret }), {});
+    expect(done.ok).toBe(true);
+    // повторно тот же вызов использовать нельзя
+    expect((await completeMfaLogin(first.challenge, generateSync({ secret }), {})).ok).toBe(false);
+  });
+});

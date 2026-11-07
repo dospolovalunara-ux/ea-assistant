@@ -1,6 +1,17 @@
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "./index";
 import {
+  corporateExpenses,
+  eventReminders,
+  familyDocuments,
+  inboxItems,
+  meetings,
+  meetingTranscripts,
+  personalCashTransfers,
+  personalExpenses,
+  protocols,
+  protocolVersions,
+  documentCategories,
   calendarEvents,
   calendars,
   eventParticipants,
@@ -34,6 +45,14 @@ export async function seedRolesAndPermissions() {
       await tx.insert(rolePermissions).values(role.permissions.map((p) => ({ roleId: r!.id, permissionCode: p })));
     }
   });
+}
+
+export async function seedDocumentCategories() {
+  const { DOCUMENT_CATEGORIES } = await import("../services/documents");
+  const db = getDb();
+  for (const [i, [code, name]] of DOCUMENT_CATEGORIES.entries()) {
+    await db.insert(documentCategories).values({ code, name, sortOrder: i }).onConflictDoUpdate({ target: documentCategories.code, set: { name, sortOrder: i } });
+  }
 }
 
 export const DEMO_USERS: { email: string; fullName: string; role: RoleCode }[] = [
@@ -132,10 +151,73 @@ export async function seedDemoContent(ids: Record<RoleCode, string>, cal: { work
   await t({ title: "Отправить поздравление партнёрам", status: "done", completedAt: at(today, -1, 11), visibility: "shared", assigneeUserId: ids.assistant });
 
   await db.insert(taskComments).values({ taskId: t1, authorId: ids.assistant, body: "Презентация готова на 80%, жду цифры от финансового отдела." });
+
+  // Напоминания к ближайшим встречам
+  const upcoming = await db.select().from(calendarEvents).where(sql`${calendarEvents.startsAt} > now() and ${calendarEvents.status} = 'confirmed'`);
+  for (const e of upcoming) {
+    for (const m of [60, 15]) {
+      const fireAt = new Date(e.startsAt.getTime() - m * 60_000);
+      if (fireAt > now) await db.insert(eventReminders).values({ eventId: e.id, minutesBefore: m, fireAt }).onConflictDoNothing();
+    }
+  }
+
+  // Входящие
+  await db.insert(inboxItems).values([
+    { kind: "text", textContent: "Ерлан: давайте встретимся с банком в следующий вторник в 15:00 у нас в офисе, переговорная 5. Будут Гульнара и я.", sourceNote: "WhatsApp, Ерлан (демо)", createdBy: ids.assistant },
+    { kind: "text", textContent: "Поручение от руководителя: подготовить справку по аренде до пятницы. Ответственный — юридический отдел.", sourceNote: "Устно (демо)", createdBy: ids.assistant },
+  ]);
+
+  // Корпоративные расходы (один без документов — для чек-листа)
+  const lunch = (await db.select().from(calendarEvents).where(eq(calendarEvents.type, "business_lunch")))[0];
+  await db.insert(corporateExpenses).values([
+    { spentAt: at(week, 2, 14, 20), amount: "38500.00", organization: "Ресторан «Пример» (демо)", category: "business_lunch", description: "Обед с партнёрами", relatedEventId: lunch?.id ?? null, createdBy: ids.assistant },
+    { spentAt: at(today, -3, 9, 15), amount: "2300.00", organization: "Такси (демо)", category: "taxi", description: "Поездка в министерство", createdBy: ids.assistant },
+  ]);
+
+  // Личные расходы: передача и траты
+  const [tr] = await db.insert(personalCashTransfers).values({ kind: "income", amount: "100000.00", occurredAt: at(today, -5, 10), description: "Передача на хозяйственные расходы (демо)", createdBy: ids.assistant }).returning({ id: personalCashTransfers.id });
+  await db.insert(personalExpenses).values([
+    { transferId: tr!.id, spentAt: at(today, -4, 13), amount: "4500.00", category: "food", description: "Обед", createdBy: ids.assistant },
+    { transferId: tr!.id, spentAt: at(today, -4, 16), amount: "1200.00", category: "food", description: "Кофе", createdBy: ids.assistant },
+    { transferId: tr!.id, spentAt: at(today, -2, 11), amount: "15800.00", category: "household", description: "Хозтовары", createdBy: ids.assistant },
+  ]);
+
+  // Совещание с черновиком протокола
+  const [mt] = await db.insert(meetings).values({ title: "Совет директоров (демо)", heldAt: at(week, 0, 10), location: "Переговорная 5", eventId: board, createdBy: ids.assistant }).returning({ id: meetings.id });
+  await db.insert(meetingTranscripts).values({ meetingId: mt!.id, text: "Динара Ахметова: Коллеги, начнём. Первый вопрос — итоги квартала.\nЕрлан Тестов: Выручка выше плана на 4%.\nДинара Ахметова: Хорошо. Ерлан, подготовьте детальный отчёт к 20 числу.\nГульнара Примерова: По бюджету — нужно согласовать с юристами.\nДинара Ахметова: Решили: бюджет утверждаем после проверки юристов.", createdBy: ids.assistant });
+  const [pr] = await db.insert(protocols).values({ meetingId: mt!.id, currentVersion: 1 }).returning({ id: protocols.id });
+  await db.insert(protocolVersions).values({
+    protocolId: pr!.id,
+    version: 1,
+    source: "manual",
+    createdBy: ids.assistant,
+    content: {
+      participants: ["Динара Ахметова", "Ерлан Тестов", "Гульнара Примерова"],
+      agenda: ["Итоги квартала", "Бюджет на следующий год"],
+      summary: "Выручка квартала выше плана на 4%. Бюджет на следующий год требует проверки юристов.",
+      decisions: [{ text: "Бюджет утверждается после проверки юристов", needsReview: false }],
+      actionItems: [{ title: "Подготовить детальный отчёт по итогам квартала", assignee: "Ерлан Тестов", due: null, needsReview: true }],
+      questions: ["Уточнить срок отчёта: «к 20 числу» — какого месяца?"],
+    },
+  });
+
+  // Семейные документы (вымышленные)
+  const d = (n: number) => fmtDate(addLocalDays(today, n, TZ));
+  await db.insert(familyDocuments).values([
+    { title: "Загранпаспорт (демо)", categoryCode: "executive", ownerName: "Динара Ахметова", docType: "паспорт", expiresOn: d(25), numberMasked: "••••0000", createdBy: ids.assistant },
+    { title: "Страховой полис автомобиля (демо)", categoryCode: "insurance", ownerName: "Динара Ахметова", docType: "полис", expiresOn: d(12), createdBy: ids.assistant },
+    { title: "Свидетельство о рождении (демо)", categoryCode: "children", ownerName: "Алия (демо)", docType: "свидетельство", confidentiality: "high", createdBy: ids.assistant },
+    { title: "Виза (демо)", categoryCode: "travel_visas", ownerName: "Супруг (демо)", docType: "виза", expiresOn: d(200), createdBy: ids.assistant },
+  ]);
+}
+
+function fmtDate(d: Date) {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: TZ }).format(d);
 }
 
 export async function seedAll(password: string) {
   await seedRolesAndPermissions();
+  await seedDocumentCategories();
   const ids = await seedUsers(password);
   const cal = await seedCalendars(ids.executive, ids.assistant);
   await seedDemoContent(ids, cal);
