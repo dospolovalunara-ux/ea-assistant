@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #f0f2f5;
+  --border: #e2e5ea;
+  --text: #1c2127;
+  --muted: #5f6873;
+  --primary: #1e3a5f;
+  --primary-fg: #ffffff;
+  --sidebar: #1c2127;
+  --sidebar-fg: #d7dce2;
+  --danger: #b42318;
+  --danger-bg: #fef3f2;
+  --warn: #93370d;
+  --warn-bg: #fffaeb;
+  --ok: #067647;
+  --ok-bg: #ecfdf3;
+  --work: #2563eb;
+  --work-bg: #e8f0fe;
+  --personal: #16a34a;
+  --personal-bg: #e7f6ec;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121519;
+    --surface: #1a1e23;
+    --surface-2: #22272e;
+    --border: #2e343c;
+    --text: #e8ebef;
+    --muted: #9aa3ad;
+    --primary: #5b8bd0;
+    --primary-fg: #0d1117;
+    --sidebar: #0d1013;
+    --sidebar-fg: #c4cad1;
+    --danger: #f97066;
+    --danger-bg: #3a1714;
+    --warn: #fdb022;
+    --warn-bg: #3a2a0c;
+    --ok: #47cd89;
+    --ok-bg: #0f2e1f;
+    --work: #6b9cf5;
+    --work-bg: #17284a;
+    --personal: #4ade80;
+    --personal-bg: #12301d;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-fg: var(--primary-fg);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-fg: var(--sidebar-fg);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-ok: var(--ok);
+  --color-ok-bg: var(--ok-bg);
+  --color-work: var(--work);
+  --color-work-bg: var(--work-bg);
+  --color-personal: var(--personal);
+  --color-personal-bg: var(--personal-bg);
+  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+html {
+  color-scheme: light dark;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+}
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
