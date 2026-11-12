@@ -215,11 +215,30 @@ function fmtDate(d: Date) {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: TZ }).format(d);
 }
 
+/**
+ * Дополнительный тестовый вход (роль помощника), если заданы TEST_USER_EMAIL и TEST_USER_PASSWORD.
+ * Только для демо-стенда с вымышленными данными.
+ */
+export async function seedTestUser() {
+  const email = process.env.TEST_USER_EMAIL?.trim().toLowerCase();
+  const password = process.env.TEST_USER_PASSWORD;
+  if (!email || !password) return;
+  const db = getDb();
+  const [role] = await db.select().from(roles).where(eq(roles.code, process.env.TEST_USER_ROLE || "assistant"));
+  if (!role) return;
+  const hash = await hashPassword(password);
+  await db
+    .insert(users)
+    .values({ email, fullName: "Тестовый пользователь", passwordHash: hash, roleId: role.id, timezone: TZ })
+    .onConflictDoUpdate({ target: users.email, set: { passwordHash: hash, roleId: role.id, isActive: true, updatedAt: new Date() } });
+}
+
 export async function seedAll(password: string) {
   await seedRolesAndPermissions();
   await seedDocumentCategories();
   const ids = await seedUsers(password);
   const cal = await seedCalendars(ids.executive, ids.assistant);
   await seedDemoContent(ids, cal);
+  await seedTestUser();
   return { ids, cal };
 }
