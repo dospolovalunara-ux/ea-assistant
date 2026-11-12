@@ -3,11 +3,18 @@ import { can, canAny } from "@/server/auth/rbac";
 import { logoutAction } from "@/server/actions/auth";
 import { NavList, type NavItem } from "@/components/nav";
 import { unreadCount } from "@/server/services/notifications";
+import { after } from "next/server";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const actor = await requireActor();
 
   // Пункты без прав не показываются. Нереализованные модули — серые, без перехода.
+  if (process.env.SCHEDULER_MODE === "on-request") {
+    after(async () => {
+      const { maybeTick } = await import("@/server/scheduler/maybe-tick");
+      await maybeTick().catch((e) => console.error("[scheduler]", e instanceof Error ? e.message : e));
+    });
+  }
   const unread = await unreadCount(actor);
   // Пункты без прав не показываются.
   const items: (NavItem & { visible: boolean })[] = [

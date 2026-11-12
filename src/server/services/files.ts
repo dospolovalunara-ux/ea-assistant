@@ -43,6 +43,22 @@ export function detectFileType(buf: Buffer, name: string): { mime: string; ext: 
   return null;
 }
 
+/** На хостинге без постоянного диска (Vercel) файлы хранятся в PostgreSQL. */
+export function useDbStorage(): boolean {
+  return process.env.FILE_STORAGE === "db";
+}
+
+/** Содержимое файла по ключу хранилища — из базы или с диска. */
+export async function readStored(f: { storageKey: string; content?: Buffer | null }): Promise<Buffer> {
+  if (f.content) return Buffer.from(f.content);
+  if (useDbStorage()) {
+    const [row] = await getDb().select({ content: files.content }).from(files).where(eq(files.storageKey, f.storageKey));
+    if (row?.content) return Buffer.from(row.content);
+    throw new NotFoundError();
+  }
+  return readFile(storagePath(f.storageKey));
+}
+
 export function storageDir(): string {
   const dir = process.env.FILE_STORAGE_DIR || "storage";
   return dir.startsWith("/") ? dir : `${process.cwd()}/${dir}`;
@@ -65,12 +81,15 @@ export async function storeFile(db: Executor, actor: Actor, scope: FileScope, fi
   const type = detectFileType(buf, file.name);
   if (!type) throw new ValidationError({ file: "Недопустимый тип файла. Разрешены PDF, JPG, PNG, DOCX, XLSX, PPTX, TXT" });
   const key = `${scope}/${randomUUID()}.${type.ext}`;
-  await mkdir(storagePath(scope), { recursive: true });
-  await writeFile(storagePath(key), buf, { mode: 0o600 });
+  const inDb = useDbStorage();
+  if (!inDb) {
+    await mkdir(storagePath(scope), { recursive: true });
+    await writeFile(storagePath(key), buf, { mode: 0o600 });
+  }
   const safeName = file.name.replace(/[^\p{L}\p{N}._ -]/gu, "_").slice(0, 150) || `file.${type.ext}`;
   const [row] = await db
     .insert(files)
-    .values({ scope, storageKey: key, originalName: safeName, mime: type.mime, size: buf.length, sha256: sha256(buf), uploadedBy: actor.id })
+    .values({ scope, storageKey: key, originalName: safeName, mime: type.mime, size: buf.length, sha256: sha256(buf), uploadedBy: actor.id, content: inDb ? buf : null })
     .returning({ id: files.id });
   return row!.id;
 }
@@ -131,7 +150,7 @@ export async function readFileForDownload(actor: Actor, fileId: string) {
     entity = { type: "family_document", id: d.id };
   } else throw new NotFoundError();
 
-  const data = await readFile(storagePath(f.storageKey));
+  const data = await readStored(f);
   await writeAudit(db, {
     userId: actor.id,
     action: f.scope === "document" ? "document.download" : "file.download",

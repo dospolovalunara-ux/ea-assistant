@@ -26,7 +26,9 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  serverExternalPackages: ["pg", "bcryptjs"],
+  serverExternalPackages: ["pg", "bcryptjs", "pdfkit"],
+  // Шрифт с кириллицей для PDF должен попасть в серверную функцию на хостинге
+  outputFileTracingIncludes: { "/api/export/[kind]": ["./assets/fonts/**"] },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

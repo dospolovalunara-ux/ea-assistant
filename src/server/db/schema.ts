@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  customType,
   bigserial,
   date,
   integer,
@@ -343,6 +344,7 @@ export const oauthStates = pgTable("oauth_states", {
 });
 
 // ---------- Файлы (приватное хранилище) ----------
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
 export const files = pgTable("files", {
   id: uuid("id").primaryKey().defaultRandom(),
   scope: text("scope").notNull(), // inbox | expense | document | meeting
@@ -352,6 +354,8 @@ export const files = pgTable("files", {
   size: integer("size").notNull(),
   sha256: text("sha256").notNull(),
   scanStatus: text("scan_status").notNull().default("not_scanned"),
+  /** Содержимое — только при FILE_STORAGE=db (хостинг без постоянного диска). */
+  content: bytea("content"),
   uploadedBy: uuid("uploaded_by").references(() => users.id),
   createdAt: ts("created_at").notNull().defaultNow(),
 });
@@ -579,6 +583,13 @@ export const vaultReferences = pgTable("vault_references", {
   ownerHint: text("owner_hint"),
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: ts("created_at").notNull().defaultNow(),
+});
+
+/** Служебное состояние (например, время последнего прохода планировщика). */
+export const appState = pgTable("app_state", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
 });
 
 export type User = typeof users.$inferSelect;

@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import JSZip from "jszip";
 import { NextResponse, type NextRequest } from "next/server";
 import { getActor } from "@/server/auth/current";
@@ -8,7 +7,7 @@ import { writeAudit } from "@/server/services/audit";
 import { corporateRegister, dailyReport, personalRegister, weeklyReport } from "@/server/services/reports";
 import { expenseFilesForPeriod } from "@/server/services/corporate-expenses";
 import { getMeeting } from "@/server/services/protocols";
-import { storagePath } from "@/server/services/files";
+import { readStored } from "@/server/services/files";
 import { MIME, toDocx, toPdf, toXlsx, type ReportDoc } from "@/server/exports/render";
 import { addLocalDays, fmt, localDayStart, parseLocalDate } from "@/lib/time";
 import { requirePermission } from "@/server/auth/rbac";
@@ -43,7 +42,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ kind
         zip.file("Реестр.pdf", await toPdf(doc));
         for (const f of await expenseFilesForPeriod(actor, r)) {
           const folder = `${fmt(f.spentAt, "yyyy-MM-dd", tz)} ${f.organization}`.replace(/[\\/:*?"<>|]/g, "_").slice(0, 80);
-          zip.file(`${folder}/${f.docType}-${f.name}`, await readFile(storagePath(f.storageKey)));
+          zip.file(`${folder}/${f.docType}-${f.name}`, await readStored(f));
         }
         await writeAudit(getDb(), { userId: actor.id, action: "export.corporate_bundle", entityType: "report", ip: actor.ip, metadata: { from: r.from, to: r.to } });
         return new NextResponse(new Uint8Array(await zip.generateAsync({ type: "nodebuffer" })), {

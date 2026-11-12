@@ -11,7 +11,7 @@ const globalForDb = globalThis as unknown as { __eaiPool?: Pool; __eaiDb?: DB };
 function createDb(): DB {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL не задан. Скопируйте .env.example в .env.");
-  const pool = new Pool({ connectionString: url, max: 10 });
+  const pool = new Pool({ connectionString: url, max: process.env.VERCEL ? 3 : 10, idleTimeoutMillis: 10_000 });
   globalForDb.__eaiPool = pool;
   return drizzle(pool, { schema });
 }
